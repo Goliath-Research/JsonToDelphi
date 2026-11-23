@@ -115,12 +115,12 @@ var
   RootClass: TStubClass;
 begin
   aTreeView.Clear;
-  try
-    RootClass := aMapper.RootClass;
-    if RootClass = nil then
-      exit;
+  RootClass := aMapper.RootClass;
+  if RootClass = nil then
+    exit;
 
-    aTreeView.BeginUpdate;
+  aTreeView.BeginUpdate;
+  try
     TreeViewItem := TTreeViewItem.Create(aTreeView);
     TreeViewItem.Text := RootClass.Name;
     TreeViewItem.TagObject := RootClass;
