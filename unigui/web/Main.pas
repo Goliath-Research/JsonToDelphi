@@ -97,8 +97,6 @@ type
 
   private
     { Private declarations }
-    JsonSettings : TSettings;
-
     procedure DefineRegrasLayout;
     procedure AlinhamentoCenter;
 
@@ -169,13 +167,12 @@ begin
   end;
 
   try
-    JsonSettings.UsePascalCase := chkUsePascalCase.Checked;
-    JsonSettings.SuppressZeroDate := chkSuppressZeroDate.Checked;
-    JsonSettings.AddJsonPropertyAttributes := chkAddJsonPropertyAttributes.Checked;
-    JsonSettings.PostFixClassNames := chkPostfixClassNames.Checked;
-
     LMapper := TPkgJsonMapper.Create;
     try
+      LMapper.Settings.UsePascalCase := chkUsePascalCase.Checked;
+      LMapper.Settings.SuppressZeroDate := chkSuppressZeroDate.Checked;
+      LMapper.Settings.AddJsonPropertyAttributes := chkAddJsonPropertyAttributes.Checked;
+      LMapper.Settings.PostFixClassNames := chkPostfixClassNames.Checked;
       LMapper.DestinationUnitName := 'RootUnit';
       LMapper.Parse(memJson.Text);
       frmGenerateUnit.synx.Text := LMapper.GenerateUnit;
@@ -350,8 +347,6 @@ procedure TMainForm.UniFormCreate(Sender: TObject);
 var
   Value: Float64;
 begin
-  JsonSettings := TSettings.Instance;
-
 //  Popup := TUniFSPopup.Create(Self);
 //  Popup.Width := 350;
 //  Popup.RelativeY := 60;
