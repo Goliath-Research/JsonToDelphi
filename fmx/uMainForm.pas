@@ -147,7 +147,11 @@ begin
 
   FJsonMapper.DestinationClassName := Edit1.Text;
   FJsonMapper.DestinationUnitName := Edit2.Text;
-  FJsonMapper.Parse(Memo1.Lines.Text);
+  try
+    FJsonMapper.Parse(Memo1.Lines.Text);
+  finally
+    JsonVisualizer.Visualize(TreeView, 'TreeViewItem1Style1', FJsonMapper);
+  end;
   SaveUnitForm.sd.FileName := FJsonMapper.DestinationUnitName + '.pas';
 
   SaveUnitForm.MemoDelphiDTO.Text := FJsonMapper.GenerateUnit;
@@ -447,9 +451,13 @@ procedure TMainForm.VisualizeClass;
 begin
   FChanged := false;
   FJsonMapper.DestinationUnitName := Edit1.Text;
-  FJsonMapper.Parse(Memo1.Text);
-
-  JsonVisualizer.Visualize(TreeView, 'TreeViewItem1Style1', FJsonMapper);
+  // Parse frees the previous stub classes, which the tree items reference,
+  // so the tree is rebuilt even when the new document is rejected.
+  try
+    FJsonMapper.Parse(Memo1.Text);
+  finally
+    JsonVisualizer.Visualize(TreeView, 'TreeViewItem1Style1', FJsonMapper);
+  end;
 
   Panel1.Width := Panel1.Width + 1;
   Panel1.Width := Panel1.Width - 1;
