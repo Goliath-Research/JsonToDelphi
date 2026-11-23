@@ -18,6 +18,10 @@ type
     FClassName: string;
   strict private
     FJsonString: string;
+    // Everything one Parse creates (the JSON tree and the stub classes) lives
+    // until the next Parse or Destroy, which free it through ClearParseResult.
+    FJsonValue: TJsonValue;
+    procedure ClearParseResult;
   protected
     function GetJsonType(aJsonValue: TJsonValue): TJsonType;
     function GetFirstArrayItem(aJSONArray: TJSONArray): TJsonValue;
@@ -174,7 +178,7 @@ begin
       StringList.Add('');
     end;
 
-    SubClasslist.Free;
+    FreeAndNil(SubClasslist);
 
     for i := FStubClasses.Count - 1 downto 1 do
     begin
@@ -194,6 +198,7 @@ begin
 
     Result := StringList.Text;
   finally
+    SubClasslist.Free;
     StringList.Free;
   end;
 end;
@@ -229,21 +234,28 @@ begin
   end;
 end;
 
-destructor TPkgJsonMapper.Destroy;
+procedure TPkgJsonMapper.ClearParseResult;
 var
   StubClass: TStubClass;
 begin
-  if Assigned(FStubClasses) then
-  begin
-    // Libera todas as classes criadas pelo parser
-    for StubClass in FStubClasses do
-      StubClass.Free;
+  FRootClass := nil;
+  FreeAndNil(FJsonValue);
 
-    FStubClasses.Clear;
-    FreeAndNil(FStubClasses);
-  end;
+  if not Assigned(FStubClasses) then
+    Exit;
 
-  FRootClass := nil; // só para não ficar pendurado
+  // TStubClassList does not own its items (TStubClass.Construct moves them
+  // around in the list), so every class created by the parser is freed here.
+  for StubClass in FStubClasses do
+    StubClass.Free;
+
+  FStubClasses.Clear;
+end;
+
+destructor TPkgJsonMapper.Destroy;
+begin
+  ClearParseResult;
+  FreeAndNil(FStubClasses);
 
   inherited;
 end;
@@ -324,9 +336,12 @@ var
   StringList: TStringList;
 begin
   StringList := TStringList.Create;
-  StringList.LoadFromFile(aJsonFile);
-  Result := Parse(StringList.Text);
-  StringList.Free;
+  try
+    StringList.LoadFromFile(aJsonFile);
+    Result := Parse(StringList.Text);
+  finally
+    StringList.Free;
+  end;
 end;
 
 function TPkgJsonMapper.Parse(aJsonString: string): TPkgJsonMapper;
@@ -337,38 +352,31 @@ var
   JsonArray: TJSONArray;
 begin
   Result := Self;
-  FStubClasses.Clear;
+  ClearParseResult;
   FJsonString := aJsonString;
   TStubClass.ClearNames;
-  JSONValue := TJSONObject.ParseJSONValue(aJsonString);
-  if JSONValue <> nil then
-  begin
-    try
-
-      FRootClass := TStubClass.Construct(nil, FClassName, Self.FStubClasses);
-
-      case GetJsonType(JSONValue) of
-        jtObject:
-          ProcessJsonObject(JSONValue, FRootClass);
-
-        jtArray:
-          begin
-            JsonArray := TJSONArray(JSONValue);
-            FRootClass.ArrayProperty := 'Items';
-            StubClass := TStubClass.Construct(FRootClass, FRootClass.ArrayProperty, Self.FStubClasses);
-            JsonType := GetJsonType(GetFirstArrayItem(JsonArray));
-            TStubArrayField.Create(FRootClass, FRootClass.ArrayProperty, JsonType, StubClass);
-
-            for JSONValue in JsonArray do
-              ProcessJsonObject(JSONValue, StubClass);
-          end;
-      end;
-    finally
-      JSONValue.Free;
-    end;
-  end
-  else
+  FJsonValue := TJSONObject.ParseJSONValue(aJsonString);
+  if FJsonValue = nil then
     raise EJsonMapper.Create('Unable to parse the JSON String!');
+
+  FRootClass := TStubClass.Construct(nil, FClassName, Self.FStubClasses);
+
+  case GetJsonType(FJsonValue) of
+    jtObject:
+      ProcessJsonObject(FJsonValue, FRootClass);
+
+    jtArray:
+      begin
+        JsonArray := TJSONArray(FJsonValue);
+        FRootClass.ArrayProperty := 'Items';
+        StubClass := TStubClass.Construct(FRootClass, FRootClass.ArrayProperty, Self.FStubClasses);
+        JsonType := GetJsonType(GetFirstArrayItem(JsonArray));
+        TStubArrayField.Create(FRootClass, FRootClass.ArrayProperty, JsonType, StubClass);
+
+        for JSONValue in JsonArray do
+          ProcessJsonObject(JSONValue, StubClass);
+      end;
+  end;
 end;
 
 end.
