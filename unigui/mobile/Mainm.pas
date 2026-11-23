@@ -32,8 +32,6 @@ type
     procedure tmrTimer(Sender: TObject);
   private
     { Private declarations }
-    jm : TPkgJsonMapper;
-
     procedure DefineRegrasLayout;
   public
     { Public declarations }
@@ -57,6 +55,7 @@ end;
 procedure TMainmForm.btnGenerateClick(Sender: TObject);
 var
   vJson : string;
+  LMapper: TPkgJsonMapper;
 begin
   vJson := Trim(memJson.Lines.Text);
 
@@ -79,14 +78,16 @@ begin
   end;
 
   try
-    if jm = nil then
-      jm := TPkgJsonMapper.Create();
+    LMapper := TPkgJsonMapper.Create;
+    try
+      LMapper.DestinationUnitName := 'RootUnit';
+      LMapper.Parse(memJson.Text);
 
-    jm.DestinationUnitName := 'RootUnit';
-    jm.Parse(memJson.Text);
-
-    frmmGenerateUnit.memSyntax.Text := jm.GenerateUnit;
-    frmmGenerateUnit.Show();
+      frmmGenerateUnit.memSyntax.Text := LMapper.GenerateUnit;
+      frmmGenerateUnit.Show();
+    finally
+      LMapper.Free;
+    end;
   except
     on e: Exception do
     begin
