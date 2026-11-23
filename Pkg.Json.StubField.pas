@@ -3,7 +3,7 @@
 interface
 
 uses System.SysUtils, System.Generics.Defaults, System.Generics.Collections,
-  Pkg.Json.JSONName, Pkg.Json.Lists, Pkg.Json.JsonValueHelper;
+  Pkg.Json.JSONName, Pkg.Json.Lists, Pkg.Json.JsonValueHelper, Pkg.Json.Settings;
 
 type
   EJsonMapper = class(Exception);
@@ -73,8 +73,6 @@ type
   end;
 
   TStubClass = class(TJsonName)
-  private
-    class var UsedClassNames: TDictionary<string, string>;
   strict private
     FArrayItems: TStubFieldList;
     FComplexItems: TStubFieldList;
@@ -86,17 +84,16 @@ type
     FArrayProperty: string;
     FHasArray: Boolean;
     FNeedsSourceCode: Boolean;
+    function GetUsedClassNames: TDictionary<string, string>;
   strict protected
-    constructor Create(aParentClass: TStubClass; aClassName: string; aStubClasses: TStubClassList; aArrayProperty: string = ''; aNeedsSourceCode: Boolean = True); virtual;
+    constructor Create(aParentClass: TStubClass; aClassName: string; aStubClasses: TStubClassList; aSettings: TSettings; aArrayProperty: string = ''; aNeedsSourceCode: Boolean = True); virtual;
   public
-    class constructor Create;
-    class destructor Destroy;
-    class procedure ClearNames;
-    class function Construct(aParentClass: TStubClass; aClassName: string; aStubClasses: TStubClassList; aArrayProperty: string = ''; aNeedsSourceCode: Boolean = True): TStubClass;
+    class function Construct(aParentClass: TStubClass; aClassName: string; aStubClasses: TStubClassList; aSettings: TSettings; aArrayProperty: string = ''; aNeedsSourceCode: Boolean = True): TStubClass;
     destructor Destroy; override;
     function GetDeclarationPart(const BaseClass: string = ''): string;
     function GetImplementationPart: string;
     procedure SortFields;
+    property UsedClassNames: TDictionary<string, string> read GetUsedClassNames;
   published
     property Items: TStubFieldObjectList read FItems write FItems;
     property ArrayProperty: string read FArrayProperty write FArrayProperty;
@@ -105,6 +102,13 @@ type
   end;
 
   TStubClassList = class(TJsonNameList<TStubClass>)
+  strict private
+    FUsedClassNames: TDictionary<string, string>;
+  public
+    constructor Create; reintroduce;
+    destructor Destroy; override;
+    procedure ClearNames;
+    property UsedClassNames: TDictionary<string, string> read FUsedClassNames;
   end;
 
 implementation
@@ -112,14 +116,30 @@ implementation
 uses
   System.StrUtils, System.Classes,
 
-  Pkg.Json.ReservedWords, Pkg.Json.Settings;
+  Pkg.Json.ReservedWords;
 
-class procedure TStubClass.ClearNames;
+{ TStubClassList }
+
+constructor TStubClassList.Create;
 begin
-  UsedClassNames.Clear;
+  inherited Create;
+  FUsedClassNames := TDictionary<string, string>.Create;
 end;
 
-class function TStubClass.Construct(aParentClass: TStubClass; aClassName: string; aStubClasses: TStubClassList; aArrayProperty: string; aNeedsSourceCode: Boolean): TStubClass;
+destructor TStubClassList.Destroy;
+begin
+  FreeAndNil(FUsedClassNames);
+  inherited;
+end;
+
+procedure TStubClassList.ClearNames;
+begin
+  FUsedClassNames.Clear;
+end;
+
+{ TStubClass }
+
+class function TStubClass.Construct(aParentClass: TStubClass; aClassName: string; aStubClasses: TStubClassList; aSettings: TSettings; aArrayProperty: string; aNeedsSourceCode: Boolean): TStubClass;
 var
   StubClass: TJsonName;
   Index: Integer;
@@ -127,7 +147,7 @@ begin
   StubClass := aStubClasses.ItemByName(aClassName);
 
   if StubClass = nil then
-    Result := TStubClass.Create(aParentClass, aClassName, aStubClasses, aArrayProperty, aNeedsSourceCode)
+    Result := TStubClass.Create(aParentClass, aClassName, aStubClasses, aSettings, aArrayProperty, aNeedsSourceCode)
   else
   begin
     Index := aStubClasses.IndexOf(StubClass as TStubClass);
@@ -136,11 +156,11 @@ begin
   end;
 end;
 
-constructor TStubClass.Create(aParentClass: TStubClass; aClassName: string; aStubClasses: TStubClassList; aArrayProperty: string; aNeedsSourceCode: Boolean);
+constructor TStubClass.Create(aParentClass: TStubClass; aClassName: string; aStubClasses: TStubClassList; aSettings: TSettings; aArrayProperty: string; aNeedsSourceCode: Boolean);
 var
   Index: Integer;
 begin
-  inherited Create(aClassName);
+  inherited Create(aClassName, aSettings);
   FStubClasses := aStubClasses;
   aClassName := DelphiName;
 
@@ -173,9 +193,9 @@ begin
   FComparer := TComparer<TStubField>.Construct(FComparison);
 end;
 
-class constructor TStubClass.Create;
+function TStubClass.GetUsedClassNames: TDictionary<string, string>;
 begin
-  UsedClassNames := TDictionary<string, string>.Create;
+  Result := FStubClasses.UsedClassNames;
 end;
 
 destructor TStubClass.Destroy;
@@ -424,7 +444,10 @@ constructor TStubField.Create(aParentClass: TStubClass; aItemName: string; aFiel
 var
   Value: string;
 begin
-  inherited Create(aItemName);
+  if aParentClass = nil then
+    raise EJsonMapper.Create('aParentClass can not be nil');
+
+  inherited Create(aItemName, aParentClass.Settings);
 
   FParentClass := aParentClass;
   FFieldType := aFieldType;
@@ -482,7 +505,7 @@ end;
 
 function TStubField.DateAttribute: string;
 begin
-  if (not TSettings.Instance.SuppressZeroDate) or (FFieldType <> jtDateTime) then
+  if (not Settings.SuppressZeroDate) or (FFieldType <> jtDateTime) then
     exit('');
 
   exit('SuppressZero');
@@ -547,10 +570,4 @@ function TStubObjectField.GetTypeAsString: string;
 begin
   Result := FieldClass.Name;
 end;
-
-class destructor TStubClass.Destroy;
-begin
-  UsedClassNames.Free;
-end;
-
 end.

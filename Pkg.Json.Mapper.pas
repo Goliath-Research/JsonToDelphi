@@ -5,13 +5,14 @@ interface
 uses
   System.Json, Rest.Json, System.SysUtils, System.Classes, System.Generics.Collections, System.Generics.Defaults,
 
-  Pkg.Json.JSONName, Pkg.Json.StubField, Pkg.Json.JsonValueHelper;
+  Pkg.Json.JSONName, Pkg.Json.StubField, Pkg.Json.JsonValueHelper, Pkg.Json.Settings;
 
 {$M+}
 
 type
   TPkgJsonMapper = class
   strict private
+    FSettings: TSettings;
     FStubClasses: TStubClassList;
     FRootClass: TStubClass;
     FUnitName: string;
@@ -35,6 +36,7 @@ type
     function SuggestClassName(aSuggestedClassName: string): string;
     procedure Debug(aLines: TStrings);
     procedure SaveToFile(aFileName: string);
+    property Settings: TSettings read FSettings;
   published
     property DestinationClassName: string read FClassName write FClassName;
     property DestinationUnitName: string read FUnitName write FUnitName;
@@ -87,7 +89,7 @@ begin
       case JsonType of
         jtObject:
           begin
-            StubClass := TStubClass.Construct(aParentClass, JsonPair.JsonString.Value, Self.FStubClasses);
+            StubClass := TStubClass.Construct(aParentClass, JsonPair.JsonString.Value, Self.FStubClasses, FSettings);
             TStubObjectField.Create(aParentClass, JsonPair.JsonString.Value, StubClass);
             ProcessJsonObject(JSONValue, StubClass);
           end;
@@ -117,7 +119,7 @@ begin
               raise EJsonMapper.Create('Nested arrays of objects are not supported!');
 
             StubClass := TStubClass.Construct(aParentClass,
-              JsonPair.JsonString.Value, Self.FStubClasses, '', JsonType = jtObject);
+              JsonPair.JsonString.Value, Self.FStubClasses, FSettings, '', JsonType = jtObject);
 
             TStubArrayField.Create(aParentClass, JsonPair.JsonString.Value,
               JsonType, StubClass, Dim);
@@ -144,7 +146,7 @@ var
   i: Integer;
   SubClasslist: TStringList;
 begin
-  TStubClass.ClearNames;
+  FStubClasses.ClearNames;
   StringList := TStringList.Create;
   SubClasslist := TStringList.Create;;
   SubClasslist.Duplicates := TDuplicates.dupIgnore;
@@ -209,6 +211,7 @@ end;
 constructor TPkgJsonMapper.Create;
 begin
   inherited Create;
+  FSettings := TSettings.Create;
   FStubClasses := TStubClassList.Create;
   FClassName := 'Root';
 end;
@@ -244,6 +247,7 @@ begin
   end;
 
   FRootClass := nil; // só para não ficar pendurado
+  FreeAndNil(FSettings);
 
   inherited;
 end;
@@ -339,13 +343,13 @@ begin
   Result := Self;
   FStubClasses.Clear;
   FJsonString := aJsonString;
-  TStubClass.ClearNames;
+  FStubClasses.ClearNames;
   JSONValue := TJSONObject.ParseJSONValue(aJsonString);
   if JSONValue <> nil then
   begin
     try
 
-      FRootClass := TStubClass.Construct(nil, FClassName, Self.FStubClasses);
+      FRootClass := TStubClass.Construct(nil, FClassName, Self.FStubClasses, FSettings);
 
       case GetJsonType(JSONValue) of
         jtObject:
@@ -355,7 +359,7 @@ begin
           begin
             JsonArray := TJSONArray(JSONValue);
             FRootClass.ArrayProperty := 'Items';
-            StubClass := TStubClass.Construct(FRootClass, FRootClass.ArrayProperty, Self.FStubClasses);
+            StubClass := TStubClass.Construct(FRootClass, FRootClass.ArrayProperty, Self.FStubClasses, FSettings);
             JsonType := GetJsonType(GetFirstArrayItem(JsonArray));
             TStubArrayField.Create(FRootClass, FRootClass.ArrayProperty, JsonType, StubClass);
 

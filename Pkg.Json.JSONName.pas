@@ -25,9 +25,10 @@ type
     property PureClassName: string read FPureClassName write FPureClassName;
     property Name: string read FName write SetName;
   public
-    constructor Create(aItemName: string); reintroduce;
+    constructor Create(aItemName: string; aSettings: TSettings); reintroduce;
     function NameAttribute: string;
-    class function CapitalizeFirst(Value: string): string;
+    class function CapitalizeFirst(Value: string; aUsePascalCase: Boolean = True): string;
+    property Settings: TSettings read FSettings;
   end;
 
 implementation
@@ -37,7 +38,7 @@ uses
 
 { TJSONName }
 
-class function TJSONName.CapitalizeFirst(Value: string): string;
+class function TJSONName.CapitalizeFirst(Value: string; aUsePascalCase: Boolean): string;
 var
   List: TStringList;
 
@@ -76,7 +77,7 @@ begin
       List[i] := s;
     end;
 
-    if not TSettings.Instance.UsePascalCase then
+    if not aUsePascalCase then
     begin
       List.Delimiter := '_';
       Exit(List.DelimitedText);
@@ -97,13 +98,15 @@ begin
   end;
 end;
 
-constructor TJSONName.Create(aItemName: string);
+constructor TJSONName.Create(aItemName: string; aSettings: TSettings);
 var
   s: string;
   ch: Char;
 begin
   inherited Create;
-  FSettings := TSettings.Instance;
+  if aSettings = nil then
+    raise Exception.Create('aSettings can not be nil');
+  FSettings := aSettings;
   if aItemName.IsEmpty then
     raise Exception.Create('aItemName can not be empty');
 
@@ -119,14 +122,14 @@ begin
   if s.StartsWith('_') then
     s := s.Substring(1);
 
-  FDelphiName := CapitalizeFirst(s);
+  FDelphiName := CapitalizeFirst(s, FSettings.UsePascalCase);
   if FDelphiName = '' then
     FDelphiName := 'Property';
 
   if not FDelphiName[1].IsLetter then
     FDelphiName := '_' + FDelphiName;
 
-  if TSettings.Instance.AddJsonPropertyAttributes then
+  if FSettings.AddJsonPropertyAttributes then
     FNeedsAttribute := True
   else
     FNeedsAttribute := not SameText(FDelphiName, FJsonName);
@@ -140,7 +143,7 @@ end;
 procedure TJSONName.SetName(const Value: string);
 begin
   FPureClassName := Value;
-  FName := 'T' + FPureClassName + TSettings.GetPostFix;
+  FName := 'T' + FPureClassName + FSettings.GetPostFix;
 end;
 
 end.
